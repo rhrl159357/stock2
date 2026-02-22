@@ -1,7 +1,15 @@
 import { ChartData } from './mockData';
 
-export async function fetchYahooFinanceData(symbol: string): Promise<ChartData[]> {
-    const url = `/api/yfinance/v8/finance/chart/${symbol}?interval=1d&range=1y`;
+export type Timeframe = '1m' | '5m' | '15m' | '30m' | '60m' | '1d' | '1wk';
+
+export async function fetchYahooFinanceData(symbol: string, interval: Timeframe = '1d'): Promise<ChartData[]> {
+    // Determine the max allowed range for the chosen interval
+    let range = '1y';
+    if (interval === '1m') range = '7d';
+    else if (['5m', '15m', '30m'].includes(interval)) range = '60d';
+    else if (interval === '60m') range = '730d'; // technically ~2 years max
+
+    const url = `/api/yfinance/v8/finance/chart/${symbol}?interval=${interval}&range=${range}`;
 
     try {
         const response = await fetch(url);
@@ -14,20 +22,28 @@ export async function fetchYahooFinanceData(symbol: string): Promise<ChartData[]
         const quotes = result.indicators.quote[0];
 
         const formattedData: ChartData[] = [];
-        let lastDateStr = '';
+        let lastTimeVal = -1;
 
         for (let i = 0; i < timestamps.length; i++) {
             if (quotes.open[i] !== null && quotes.close[i] !== null) {
-                // Convert Unix timestamp to YYYY-MM-DD
-                const date = new Date(timestamps[i] * 1000);
-                const dateStr = date.toISOString().split('T')[0];
 
-                // Lightweight charts requires strictly unique and increasing time values
-                if (dateStr === lastDateStr) continue;
-                lastDateStr = dateStr;
+                let timeVal: any;
+
+                if (interval === '1d' || interval === '1wk') {
+                    // For daily/weekly, use YYYY-MM-DD
+                    const date = new Date(timestamps[i] * 1000);
+                    timeVal = date.toISOString().split('T')[0];
+                } else {
+                    // For intraday, lightweight-charts requires UNIX timestamps (seconds)
+                    timeVal = timestamps[i];
+                }
+
+                // Strictly unique time values
+                if (timeVal === lastTimeVal) continue;
+                lastTimeVal = timeVal;
 
                 formattedData.push({
-                    time: dateStr,
+                    time: timeVal,
                     open: Number(quotes.open[i].toFixed(2)),
                     high: Number(quotes.high[i].toFixed(2)),
                     low: Number(quotes.low[i].toFixed(2)),

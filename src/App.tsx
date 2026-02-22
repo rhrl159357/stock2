@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TradingChart, ChartRef } from './components/TradingChart';
 import { ChartData } from './utils/mockData';
 import { applyStrategy } from './strategies';
-import { fetchYahooFinanceData } from './utils/api';
+import { fetchYahooFinanceData, Timeframe } from './utils/api';
 import { SP500_SYMBOLS } from './utils/sp500';
 import { calculateSMA } from './utils/indicators';
 import { Time } from 'lightweight-charts';
@@ -14,6 +14,7 @@ import { STRATEGY_IDS } from './strategies';
 function App() {
     const [activeStrategies, setActiveStrategies] = useState<Set<string>>(new Set());
     const [symbol, setSymbol] = useState<string>('AAPL');
+    const [timeframe, setTimeframe] = useState<Timeframe>('1d');
     const [data, setData] = useState<ChartData[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ function App() {
 
                 await Promise.all(batch.map(async (s) => {
                     try {
-                        const sData = await fetchYahooFinanceData(s);
+                        const sData = await fetchYahooFinanceData(s, timeframe);
                         if (sData.length === 0) return;
 
                         let buyCount = 0;
@@ -71,12 +72,12 @@ function App() {
 
         scan();
         return () => { isActive = false; };
-    }, [scannerSymbols]);
+    }, [scannerSymbols, timeframe]);
 
     useEffect(() => {
         let mounted = true;
         setLoading(true);
-        fetchYahooFinanceData(symbol)
+        fetchYahooFinanceData(symbol, timeframe)
             .then(fetchedData => {
                 if (!mounted) return;
                 setData(fetchedData);
@@ -89,7 +90,7 @@ function App() {
                 setLoading(false);
             });
         return () => { mounted = false; };
-    }, [symbol]);
+    }, [symbol, timeframe]);
 
     const handleStrategyToggle = (strategyId: string) => {
         setActiveStrategies(prev => {
@@ -224,6 +225,23 @@ function App() {
                             {activeStrategies.size > 0 ? `${activeStrategies.size} strategies active` : 'Select strategies to backtest'}
                         </span>
                     </div>
+
+                    {/* Timeframe Selector */}
+                    <div className="flex bg-slate-950/50 p-1 rounded-lg border border-slate-800/50">
+                        {(['1m', '5m', '15m', '30m', '60m', '1d', '1wk'] as Timeframe[]).map((tf) => (
+                            <button
+                                key={tf}
+                                onClick={() => setTimeframe(tf)}
+                                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${timeframe === tf
+                                    ? 'bg-blue-500/20 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.1)]'
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                                    }`}
+                            >
+                                {tf.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+
                     <div className="flex items-center gap-4">
                         <SearchableSymbolSelect value={symbol} onChange={setSymbol} signalMap={signalMap} />
                     </div>
